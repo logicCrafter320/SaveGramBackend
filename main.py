@@ -15,58 +15,72 @@ app.add_middleware(
 class SearchRequest(BaseModel):
     query: str
 
-PIPED_API = "https://pipedapi.kavin.rocks"
+PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://piped-api.garudalinux.org",
+    "https://api.piped.projectsegfau.lt",
+]
 
 @app.post("/search")
 def search_song(req: SearchRequest):
-    try:
-        # Search for the song
-        search_resp = requests.get(
-            f"{PIPED_API}/search",
-            params={"q": req.query, "filter": "music_songs"},
-            timeout=15
-        )
-        search_data = search_resp.json()
-        items = search_data.get("items", [])
+    for PIPED_API in PIPED_INSTANCES:
+        try:
+            search_resp = requests.get(
+                f"{PIPED_API}/search",
+                params={"q": req.query, "filter": "music_songs"},
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            
+            if search_resp.status_code != 200:
+                continue
+                
+            search_data = search_resp.json()
+            items = search_data.get("items", [])
 
-        if not items:
-            return {"error": "No results found", "stream_url": None}
+            if not items:
+                continue
 
-        video = items[0]
-        video_id = video["url"].replace("/watch?v=", "")
-        title = video.get("title", req.query)
-        artist = video.get("uploaderName", "")
-        thumbnail = video.get("thumbnail", "")
+            video = items[0]
+            video_id = video["url"].replace("/watch?v=", "")
+            title = video.get("title", req.query)
+            artist = video.get("uploaderName", "")
+            thumbnail = video.get("thumbnail", "")
 
-        # Get stream URL
-        stream_resp = requests.get(
-            f"{PIPED_API}/streams/{video_id}",
-            timeout=15
-        )
-        stream_data = stream_resp.json()
+            stream_resp = requests.get(
+                f"{PIPED_API}/streams/{video_id}",
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            
+            if stream_resp.status_code != 200:
+                continue
+                
+            stream_data = stream_resp.json()
+            audio_streams = stream_data.get("audioStreams", [])
+            stream_url = None
 
-        # Get best audio stream
-        audio_streams = stream_data.get("audioStreams", [])
-        stream_url = None
+            for stream in sorted(audio_streams, key=lambda x: x.get("bitrate", 0), reverse=True):
+                if "audio" in stream.get("mimeType", ""):
+                    stream_url = stream["url"]
+                    break
 
-        for stream in audio_streams:
-            if stream.get("mimeType", "").startswith("audio/"):
-                stream_url = stream["url"]
-                break
+            if not stream_url and audio_streams:
+                stream_url = audio_streams[0]["url"]
 
-        if not stream_url and audio_streams:
-            stream_url = audio_streams[0]["url"]
+            if stream_url:
+                return {
+                    "stream_url": stream_url,
+                    "title": title,
+                    "artist": artist,
+                    "thumbnail": thumbnail,
+                    "duration": video.get("duration", 0)
+                }
 
-        return {
-            "stream_url": stream_url,
-            "title": title,
-            "artist": artist,
-            "thumbnail": thumbnail,
-            "duration": video.get("duration", 0)
-        }
+        except Exception as e:
+            continue
 
-    except Exception as e:
-        return {"error": str(e), "stream_url": None}
+    return {"error": "All sources failed", "stream_url": None}
 
 @app.get("/")
 def root():
