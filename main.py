@@ -19,7 +19,7 @@ class SearchRequest(BaseModel):
 @app.post("/search")
 def search_song(req: SearchRequest):
     try:
-        cookie_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
+        cookie_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
         
         ydl_opts = {
             "format": "bestaudio/best",
@@ -27,7 +27,10 @@ def search_song(req: SearchRequest):
             "noplaylist": True,
             "default_search": "ytsearch1",
             "extract_flat": False,
-            "cookiefile": cookie_file,
+            "cookiefile": cookie_file if os.path.exists(cookie_file) else None,
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -68,3 +71,7 @@ def search_song(req: SearchRequest):
 @app.get("/")
 def root():
     return {"status": "SaveGram backend running!"}
+
+@app.head("/")
+def root_head():
+    return {}
