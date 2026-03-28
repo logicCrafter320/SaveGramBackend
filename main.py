@@ -25,32 +25,50 @@ def search_song(req: SearchRequest):
             headers={"User-Agent": "Mozilla/5.0"}
         )
 
-        data = search_resp.json()
-        results = data.get("data", {}).get("results", [])
+        raw = search_resp.json()
+        
+        # Handle different response structures
+        if isinstance(raw.get("data"), dict):
+            results = raw["data"].get("results", [])
+        elif isinstance(raw.get("data"), list):
+            results = raw["data"]
+        else:
+            results = []
 
         if not results:
             return {"error": "No results found", "stream_url": None}
 
         song = results[0]
-        title = song.get("name", req.query)
-        artist = ", ".join([a.get("name", "") for a in song.get("artists", {}).get("primary", [])])
-        images = song.get("image", [])
-        thumbnail = images[-1].get("link", "") if images else ""
-        duration = song.get("duration", 0)
+        title = song.get("name", "") or song.get("title", req.query)
+        
+        artists = song.get("artists", {})
+        if isinstance(artists, dict):
+            primary = artists.get("primary", [])
+            artist = ", ".join([a.get("name", "") for a in primary]) if primary else ""
+        else:
+            artist = str(artists)
 
-        download_urls = song.get("downloadUrl", [])
+        images = song.get("image", [])
+        if images and isinstance(images, list):
+            thumbnail = images[-1].get("link", "") or images[-1].get("url", "")
+        else:
+            thumbnail = ""
+
+        download_urls = song.get("downloadUrl", []) or song.get("download_url", [])
         stream_url = None
-        for url_info in reversed(download_urls):
-            if url_info.get("link"):
-                stream_url = url_info["link"]
-                break
+        if isinstance(download_urls, list):
+            for url_info in reversed(download_urls):
+                link = url_info.get("link") or url_info.get("url")
+                if link:
+                    stream_url = link
+                    break
 
         return {
             "stream_url": stream_url,
             "title": title,
             "artist": artist,
             "thumbnail": thumbnail,
-            "duration": duration
+            "duration": song.get("duration", 0)
         }
 
     except Exception as e:
