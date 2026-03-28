@@ -19,56 +19,38 @@ class SearchRequest(BaseModel):
 def search_song(req: SearchRequest):
     try:
         search_resp = requests.get(
-            "https://jiosaavn-api-privatecvc2.vercel.app/api/search/songs",
-            params={"query": req.query, "page": 1, "limit": 1},
+            "https://jiosaavn-api-privatecvc2.vercel.app/search/songs",
+            params={"query": req.query, "limit": 1},
             timeout=15,
             headers={"User-Agent": "Mozilla/5.0"}
         )
 
-        raw = search_resp.json()
-        
-        # Handle different response structures
-        if isinstance(raw.get("data"), dict):
-            results = raw["data"].get("results", [])
-        elif isinstance(raw.get("data"), list):
-            results = raw["data"]
-        else:
-            results = []
+        data = search_resp.json()
+        results = data.get("data", {}).get("results", [])
 
         if not results:
             return {"error": "No results found", "stream_url": None}
 
         song = results[0]
-        title = song.get("name", "") or song.get("title", req.query)
-        
-        artists = song.get("artists", {})
-        if isinstance(artists, dict):
-            primary = artists.get("primary", [])
-            artist = ", ".join([a.get("name", "") for a in primary]) if primary else ""
-        else:
-            artist = str(artists)
+        title = song.get("name", req.query)
+        artist = song.get("primaryArtists", "")
 
         images = song.get("image", [])
-        if images and isinstance(images, list):
-            thumbnail = images[-1].get("link", "") or images[-1].get("url", "")
-        else:
-            thumbnail = ""
+        thumbnail = images[-1].get("link", "") if images else ""
 
-        download_urls = song.get("downloadUrl", []) or song.get("download_url", [])
+        download_urls = song.get("downloadUrl", [])
         stream_url = None
-        if isinstance(download_urls, list):
-            for url_info in reversed(download_urls):
-                link = url_info.get("link") or url_info.get("url")
-                if link:
-                    stream_url = link
-                    break
+        for url_info in reversed(download_urls):
+            if url_info.get("link"):
+                stream_url = url_info["link"]
+                break
 
         return {
             "stream_url": stream_url,
             "title": title,
             "artist": artist,
             "thumbnail": thumbnail,
-            "duration": song.get("duration", 0)
+            "duration": int(song.get("duration", 0))
         }
 
     except Exception as e:
