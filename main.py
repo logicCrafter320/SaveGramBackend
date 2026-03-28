@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
+import os
 
 app = FastAPI()
 
@@ -18,29 +19,29 @@ class SearchRequest(BaseModel):
 @app.post("/search")
 def search_song(req: SearchRequest):
     try:
+        cookie_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
+        
         ydl_opts = {
             "format": "bestaudio/best",
             "quiet": True,
             "noplaylist": True,
             "default_search": "ytsearch1",
             "extract_flat": False,
+            "cookiefile": cookie_file,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(req.query, download=False)
 
-            # If it's a search result, get first item
             if "entries" in info:
                 info = info["entries"][0]
 
-            # Get best audio URL
             stream_url = None
             for fmt in info.get("formats", []):
                 if fmt.get("acodec") != "none" and fmt.get("vcodec") == "none":
                     stream_url = fmt["url"]
                     break
 
-            # Fallback to any format with audio
             if not stream_url:
                 for fmt in info.get("formats", []):
                     if fmt.get("acodec") != "none":
@@ -50,7 +51,6 @@ def search_song(req: SearchRequest):
             title  = info.get("title", req.query)
             artist = info.get("uploader", "")
 
-            # Clean up artist name
             if " - Topic" in artist:
                 artist = artist.replace(" - Topic", "")
 
@@ -68,11 +68,3 @@ def search_song(req: SearchRequest):
 @app.get("/")
 def root():
     return {"status": "SaveGram backend running!"}
-ydl_opts = {
-    "format": "bestaudio/best",
-    "quiet": True,
-    "noplaylist": True,
-    "default_search": "ytsearch1",
-    "extract_flat": False,
-    "cookiefile": "cookies.txt",
-}
