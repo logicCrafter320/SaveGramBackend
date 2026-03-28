@@ -74,5 +74,5 @@ ydl_opts = {
     "noplaylist": True,
     "default_search": "ytsearch1",
     "extract_flat": False,
-    "extractor_args": {"youtube": {"skip": ["dash", "hls"]}},
+    "cookiefile": "cookies.txt",
 }
